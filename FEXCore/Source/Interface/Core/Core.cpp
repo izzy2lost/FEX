@@ -431,6 +431,7 @@ FEXCore::Core::InternalThreadState* ContextImpl::CreateThread(const FEXCore::Cor
 
   // Set up the thread manager state
   Thread->CurrentFrame->Thread = Thread;
+  Thread->CurrentFrame->GuestMemoryBase = GuestMemoryBaseEnabled() ? GuestMemoryBase : 0;
 
   InitializeCompiler(Thread);
 
@@ -611,7 +612,7 @@ ContextImpl::GenerateIR(FEXCore::Core::InternalThreadState* Thread, uint64_t Gue
 
 #ifdef ZYDIS_DISASSEMBLER
         if (FEXCore::Config::Get_X86DISASSEMBLE()) {
-          const uint8_t* InstBytes = reinterpret_cast<const uint8_t*>(InstAddress);
+          const uint8_t* InstBytes = reinterpret_cast<const uint8_t*>(InstAddress + (GuestMemoryBaseEnabled() ? GuestMemoryBase : 0));
           ZydisDisassembledInstruction ZydisInst;
           if (ZYAN_SUCCESS(ZydisDisassembleIntel(ZydisMachineMode, InstAddress, InstBytes, DecodedInfo->InstSize, &ZydisInst))) {
             LogMan::Msg::IFmt("    {:#x}: {}", InstAddress, ZydisInst.text);

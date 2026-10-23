@@ -484,6 +484,10 @@ public:
     X87SinglePrecision = true;
   }
 
+  // 32-bit only: the guest's 4 GiB live behind REG_MEMBASE.
+  bool GuestMemoryBaseEnabled() const {
+    return GuestMemoryBase != 0 && !Config.Is64BitMode;
+  }
   bool SystemOpsEnabled() const {
     return SystemOps;
   }

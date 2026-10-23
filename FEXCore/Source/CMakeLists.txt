@@ -64,6 +64,7 @@ set(SRCS
   Interface/IR/IREmitter.cpp
   Interface/IR/PassManager.cpp
   Interface/IR/Passes/IRDumperPass.cpp
+  Interface/IR/Passes/GuestMemoryBasePass.cpp
   Interface/IR/Passes/IRValidation.cpp
   Interface/IR/Passes/RedundantFlagCalculationElimination.cpp
   Interface/IR/Passes/RegisterAllocationPass.cpp

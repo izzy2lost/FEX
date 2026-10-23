@@ -47,6 +47,10 @@ constexpr auto REG_AF = ARMEmitter::Reg::r27;
 
 constexpr auto REG_CALLRET_SP = ARMEmitter::XReg::x25;
 
+// 32-bit guest memory base (ContextImpl::GuestMemoryBaseEnabled): callee-saved, so it
+// survives every host call; taken out of the 32-bit register allocator when in use.
+constexpr auto REG_MEMBASE = ARMEmitter::XReg::x19;
+
 // Vector temporaries
 constexpr auto VTMP1 = ARMEmitter::VReg::v0;
 constexpr auto VTMP2 = ARMEmitter::VReg::v1;

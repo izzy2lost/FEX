@@ -701,6 +701,11 @@ ARMEmitter::SVEMemOperand Arm64JITCore::GenerateSVEMemOperand(IR::OpSize AccessS
   return ARMEmitter::SVEMemOperand(Base.X(), RegOffset.X());
 }
 
+DEF_OP(AddGuestBase) {
+  const auto Op = IROp->C<IR::IROp_AddGuestBase>();
+  add(ARMEmitter::Size::i64Bit, GetReg(Node).X(), REG_MEMBASE, GetReg(Op->Addr).X(), ARMEmitter::ExtendedType::UXTW, 0);
+}
+
 DEF_OP(LoadMem) {
   const auto Op = IROp->C<IR::IROp_LoadMem>();
   const auto OpSize = IROp->Size;
@@ -1485,6 +1490,21 @@ DEF_OP(Push) {
   const auto AddrSrc = GetReg(Op->Addr);
   const auto Dst = GetReg(Node);
 
+  if (CTX->GuestMemoryBaseEnabled()) {
+    // The result is the guest stack pointer; the store goes behind the base.
+    sub(ARMEmitter::Size::i32Bit, TMP2, AddrSrc, ValueSize);
+    const auto Mem = ARMEmitter::ExtendedMemOperand(REG_MEMBASE, TMP2, ARMEmitter::ExtendedType::UXTW, 0);
+    switch (ValueSize) {
+    case 1: strb(Src.W(), Mem); break;
+    case 2: strh(Src.W(), Mem); break;
+    case 4: str(Src.W(), Mem); break;
+    case 8: str(Src.X(), Mem); break;
+    default: LOGMAN_MSG_A_FMT("Unhandled {} size: {}", __func__, ValueSize); break;
+    }
+    mov(ARMEmitter::Size::i32Bit, Dst, TMP2);
+    return;
+  }
+
   bool NeedsMoveAfterwards = false;
   if (Dst != AddrSrc) {
     if (Dst == Src) {
@@ -1570,6 +1590,18 @@ DEF_OP(PushTwo) {
   auto Src2 = GetReg(Op->Value2);
   const auto Dst = GetReg(Op->Addr);
 
+  if (CTX->GuestMemoryBaseEnabled()) {
+    sub(ARMEmitter::Size::i32Bit, TMP2, Dst, 2 * ValueSize);
+    add(ARMEmitter::Size::i64Bit, TMP1, REG_MEMBASE, TMP2, ARMEmitter::ExtendedType::UXTW, 0);
+    switch (ValueSize) {
+    case 4: stp<ARMEmitter::IndexType::OFFSET>(Src1.W(), Src2.W(), TMP1, 0); break;
+    case 8: stp<ARMEmitter::IndexType::OFFSET>(Src1.X(), Src2.X(), TMP1, 0); break;
+    default: LOGMAN_MSG_A_FMT("Unhandled {} size: {}", __func__, ValueSize); break;
+    }
+    mov(ARMEmitter::Size::i32Bit, Dst, TMP2);
+    return;
+  }
+
   switch (ValueSize) {
   case 4: {
     stp<ARMEmitter::IndexType::PRE>(Src1.W(), Src2.W(), Dst, -2 * ValueSize);
@@ -1593,6 +1625,19 @@ DEF_OP(Pop) {
   const auto Dst = GetReg(Op->OutValue);
 
   LOGMAN_THROW_A_FMT(Dst != Addr, "Invalid");
+
+  if (CTX->GuestMemoryBaseEnabled()) {
+    const auto Mem = ARMEmitter::ExtendedMemOperand(REG_MEMBASE, Addr.X(), ARMEmitter::ExtendedType::UXTW, 0);
+    switch (Size) {
+    case 1: ldrb(Dst.W(), Mem); break;
+    case 2: ldrh(Dst.W(), Mem); break;
+    case 4: ldr(Dst.W(), Mem); break;
+    case 8: ldr(Dst.X(), Mem); break;
+    default: LOGMAN_MSG_A_FMT("Unhandled {} size: {}", __func__, Op->Size); break;
+    }
+    add(ARMEmitter::Size::i32Bit, Addr, Addr, Size);
+    return;
+  }
 
   switch (Size) {
   case 1: {
@@ -1632,6 +1677,17 @@ DEF_OP(PopTwo) {
 
   LOGMAN_THROW_A_FMT(Dst1 != Addr && Dst2 != Addr, "Invalid");
   LOGMAN_THROW_A_FMT(Dst1 != Dst2, "Invalid");
+
+  if (CTX->GuestMemoryBaseEnabled()) {
+    add(ARMEmitter::Size::i64Bit, TMP1, REG_MEMBASE, Addr, ARMEmitter::ExtendedType::UXTW, 0);
+    switch (Size) {
+    case 4: ldp<ARMEmitter::IndexType::OFFSET>(Dst1.W(), Dst2.W(), TMP1, 0); break;
+    case 8: ldp<ARMEmitter::IndexType::OFFSET>(Dst1.X(), Dst2.X(), TMP1, 0); break;
+    default: LOGMAN_MSG_A_FMT("Unhandled {} size: {}", __func__, Op->Size); break;
+    }
+    add(ARMEmitter::Size::i32Bit, Addr, Addr, 2 * Size);
+    return;
+  }
 
   switch (Size) {
   case 4: {
@@ -1889,7 +1945,15 @@ DEF_OP(MemSet) {
   ARMEmitter::ForwardLabel Done {};
 
   mov(TMP1, Length.X());
-  if (Op->Prefix.IsInvalid()) {
+  if (CTX->GuestMemoryBaseEnabled()) {
+    // The working pointer is a host address; the result stays a guest address.
+    if (Op->Prefix.IsInvalid()) {
+      add(ARMEmitter::Size::i64Bit, TMP2, REG_MEMBASE, MemReg, ARMEmitter::ExtendedType::UXTW, 0);
+    } else {
+      add(ARMEmitter::Size::i32Bit, TMP2, GetReg(Op->Prefix), MemReg);
+      add(ARMEmitter::Size::i64Bit, TMP2, REG_MEMBASE, TMP2, ARMEmitter::ExtendedType::UXTW, 0);
+    }
+  } else if (Op->Prefix.IsInvalid()) {
     mov(TMP2, MemReg.X());
   } else {
     const auto Prefix = GetReg(Op->Prefix);
@@ -2127,8 +2191,14 @@ DEF_OP(MemCpy) {
   ARMEmitter::ForwardLabel Done {};
 
   mov(TMP1, Length.X());
-  mov(TMP2, MemRegDest.X());
-  mov(TMP3, MemRegSrc.X());
+  if (CTX->GuestMemoryBaseEnabled()) {
+    // Host working pointers; the results stay guest addresses.
+    add(ARMEmitter::Size::i64Bit, TMP2, REG_MEMBASE, MemRegDest, ARMEmitter::ExtendedType::UXTW, 0);
+    add(ARMEmitter::Size::i64Bit, TMP3, REG_MEMBASE, MemRegSrc, ARMEmitter::ExtendedType::UXTW, 0);
+  } else {
+    mov(TMP2, MemRegDest.X());
+    mov(TMP3, MemRegSrc.X());
+  }
 
   // TMP1 = Length
   // TMP2 = Dest

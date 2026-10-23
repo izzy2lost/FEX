@@ -1366,9 +1366,11 @@ const Decoder::DecodeStream Decoder::AdjustAddrForSpecialRegion(const uint8_t* _
     };
   }
 
+  // Guest addresses for the range checks; the bytes come from behind the guest memory base.
+  const uint64_t Base = CTX->GuestMemoryBaseEnabled() ? CTX->GuestMemoryBase : 0;
   return DecodeStream {
     .InstStream = _InstStream - EntryPoint + RIP,
-    .AdjustedInstStream = _InstStream - EntryPoint + RIP,
+    .AdjustedInstStream = _InstStream - EntryPoint + RIP + Base,
   };
 }
 

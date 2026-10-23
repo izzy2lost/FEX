@@ -397,6 +397,12 @@ Arm64Emitter::Arm64Emitter(FEXCore::Context::ContextImpl* ctx, void* EmissionPtr
 
     StaticRegisters = x32::SRA;
     GeneralRegisters = x32::RA;
+#ifndef ARCHITECTURE_arm64ec
+    if (EmitterCTX->GuestMemoryBaseEnabled()) {
+      static_assert(x32::RA.back() == REG_MEMBASE.R(), "REG_MEMBASE must be the last 32-bit RA register");
+      GeneralRegisters = std::span(x32::RA).first(x32::RA.size() - 1);
+    }
+#endif
     GeneralRegistersNotPreserved = x32::NotPreserved_Dynamic;
 
     StaticFPRegisters = x32::SRAFPR;

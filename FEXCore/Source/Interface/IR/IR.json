@@ -725,6 +725,12 @@
                 ],
         "HasSideEffects": true
       },
+      "GPR = AddGuestBase GPR:$Addr": {
+        "Desc": ["Host address of a 32-bit guest address: GuestMemoryBase + zext32(Addr)",
+                 "Inserted by the guest memory base pass in front of every guest memory access"
+                ],
+        "DestSize": "OpSize::i64Bit"
+      },
       "CacheLineZero GPR:$Addr": {
         "Desc": ["Does a 64 byte zero at the address specified",
                  "Writing zeroes to memory",

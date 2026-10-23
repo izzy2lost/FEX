@@ -77,6 +77,11 @@ void PassManager::AddDefaultPasses(Context::ContextImpl* ctx) {
     InsertPass(CreateDeadFlagCalculationEliminination());
   }
 
+  // Not an optimization: guest memory sits behind the base whether or not passes run.
+  if (ctx->GuestMemoryBaseEnabled()) {
+    InsertPass(CreateGuestMemoryBasePass(), "GuestMemoryBase");
+  }
+
   InsertPass(IR::CreateRegisterAllocationPass(&ctx->CPUID), "RA");
 
 #if defined(ASSERTIONS_ENABLED) && ASSERTIONS_ENABLED

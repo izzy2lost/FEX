@@ -80,6 +80,11 @@ void Dispatcher::EmitDispatcher() {
   // Move our thread pointer to the correct register
   // This is passed in to parameter 0 (x0)
   mov(STATE, ARMEmitter::XReg::x0);
+#ifndef ARCHITECTURE_arm64ec
+  if (CTX->GuestMemoryBaseEnabled()) {
+    ldr(REG_MEMBASE, STATE_PTR(CpuStateFrame, GuestMemoryBase));
+  }
+#endif
 
   // Save this stack pointer so we can cleanly shutdown the emulation with a long jump
   // regardless of where we were in the stack
@@ -485,6 +490,11 @@ void Dispatcher::EmitDispatcher() {
 
     // First thing we need to move the thread state pointer back in to our register
     mov(STATE, ARMEmitter::XReg::x0);
+#ifndef ARCHITECTURE_arm64ec
+    if (CTX->GuestMemoryBaseEnabled()) {
+      ldr(REG_MEMBASE, STATE_PTR(CpuStateFrame, GuestMemoryBase));
+    }
+#endif
 
     // Make sure to adjust the refcounter so we don't clear the cache now
     ldr(ARMEmitter::WReg::w2, STATE_PTR(CpuStateFrame, SignalHandlerRefCounter));
