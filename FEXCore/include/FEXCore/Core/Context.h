@@ -175,6 +175,28 @@ public:
   FEX_DEFAULT_VISIBILITY virtual void EnableExitOnHLT() = 0;
 
   /**
+   * @name System mode (x1box/hakuX)
+   *
+   * A 32-bit guest that runs privileged code under an embedder's kernel: no Linux or
+   * Windows front end. Set before InitCore.
+   * @{ */
+  /// Host address of guest address 0 (32-bit mode): guest accesses become base + zext32(address).
+  FEX_DEFAULT_VISIBILITY virtual void SetGuestMemoryBase(uint64_t Base) = 0;
+  /// Privileged/system instructions exit through the syscall handler (CpuStateFrame::SystemOpInfo).
+  FEX_DEFAULT_VISIBILITY virtual void EnableSystemOps() = 0;
+  /// What SIDT stores.
+  FEX_DEFAULT_VISIBILITY virtual void SetIDTRegister(uint32_t Base, uint16_t Limit) = 0;
+  /// Asked at translation time for each guest instruction; true makes it exit with SystemOpKind::Hook.
+  using HookQueryFn = bool (*)(void* Opaque, uint64_t RIP);
+  FEX_DEFAULT_VISIBILITY virtual void SetHookQuery(HookQueryFn Fn, void* Opaque) = 0;
+  /// RDTSC = (CNTVCT - CycleCounterOffset) * Ratio / 2^32.
+  FEX_DEFAULT_VISIBILITY virtual void SetGuestCycleCounterRatio(uint64_t RatioQ32) = 0;
+  /// Reduced-precision x87 with X87ReducedPrecisionControl: from now on translations round
+  /// to single precision (the embedder drops older translations).
+  FEX_DEFAULT_VISIBILITY virtual void EnableX87SinglePrecision() = 0;
+  /** @} */
+
+  /**
    * @brief Adds a new Thunk trampoline handler
    *
    * @param Entrypoint The guest PC that the custom thunk trampoline IR handler will be installed at.

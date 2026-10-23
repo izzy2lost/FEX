@@ -398,6 +398,48 @@ struct JITPointers {
 };
 
 // Each guest JIT frame has one of these
+// System mode (Context::EnableSystemOps): privileged and system instructions, and
+// two non-instruction events, leave the JIT through the syscall path with
+// CpuStateFrame::SystemOpInfo = Kind | InstSize << 8, State.rip at the instruction.
+// The order is the embedder's ABI: append only.
+enum class SystemOpKind : uint8_t {
+  None = 0,
+  In,
+  Out,
+  Ins,
+  Outs,
+  Cli,
+  Sti,
+  Hlt,
+  Int,
+  Into,
+  Int1,
+  Int3,
+  Ud2,
+  Rdmsr,
+  Wrmsr,
+  Rdpmc,
+  Wbinvd,
+  Invd,
+  Invlpg,
+  Clts,
+  MovCR,
+  MovDR,
+  Lgdt,
+  Lidt,
+  Lldt,
+  Ltr,
+  Lmsw,
+  Cpuid,
+  Other,
+  // An interrupt was requested (InterruptPending): rip is the first instruction of
+  // the guest block about to run, size 0.
+  Interrupt,
+  // rip is a hooked address (Context::SetHookQuery) about to run, size 0. Setting
+  // HookBypass to rip runs the instruction instead, once.
+  Hook,
+};
+
 struct CpuStateFrame {
   CPUState State;
 
@@ -429,6 +471,17 @@ struct CpuStateFrame {
   } SynchronousFaultData;
 
   InternalThreadState* Thread;
+
+  // System mode (see SystemOpKind).
+  uint64_t SystemOpInfo {};
+  // Host address of guest address 0: every guest access in 32-bit mode is
+  // GuestMemoryBase + zext32(address). Loaded into REG_MEMBASE on JIT entry.
+  uint64_t GuestMemoryBase {};
+  // RDTSC is (CNTVCT - CycleCounterOffset) scaled by Context::SetGuestCycleCounterRatio.
+  uint64_t CycleCounterOffset {};
+  // Set from any host thread: the guest leaves with SystemOpKind::Interrupt at its next block entry.
+  uint32_t InterruptPending {};
+  uint32_t HookBypass {};
 
 #ifdef _WIN32
   // Set by the kernel on ARM64EC whenever the JIT should cooperatively suspend running guest code.

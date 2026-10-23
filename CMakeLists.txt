@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(FEX C CXX ASM)
+set(FEX_PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(FEX_PROJECT_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 
 include(CheckIncludeFiles)
 check_include_files("gdb/jit-reader.h" HAVE_GDB_JIT_READER_H)
@@ -61,7 +63,7 @@ if (NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "Unsupported pointer size ${CMAKE_SIZEOF_VOID_P}."
     " FEX only supports 64-bit (8-byte pointer) systems."
     " If you believe this is in error, file an issue.")
-elseif (NOT (WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+elseif (NOT (WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android"))
   message(FATAL_ERROR "Unsupported system type ${CMAKE_SYSTEM_NAME}."
     " FEX only supports Linux and Windows."
     " If you believe this is in error, file an issue.")
@@ -201,7 +203,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${FEX_PROJECT_BINARY_DIR}/Bin)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 cmake_policy(SET CMP0083 NEW) # Follow new PIE policy
@@ -361,7 +363,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fomit-frame-pointer")
 set(CMAKE_LINKER_FLAGS_RELEASE "${CMAKE_LINKER_FLAGS_RELEASE} -fomit-frame-pointer")
 
 ## Modules ##
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Data/CMake/)
+list(APPEND CMAKE_MODULE_PATH ${FEX_PROJECT_SOURCE_DIR}/Data/CMake/)
 
 include(LinkerGC)
 
@@ -457,7 +459,7 @@ endif()
 add_subdirectory(External/tiny-json/)
 
 include_directories(Source/)
-include_directories("${CMAKE_BINARY_DIR}/Source/")
+include_directories("${FEX_PROJECT_BINARY_DIR}/Source/")
 
 include(CheckCXXCompilerFlag)
 
@@ -559,7 +561,7 @@ if (OVERRIDE_VERSION STREQUAL "detect")
   if (GIT_FOUND)
     execute_process(
       COMMAND ${GIT_EXECUTABLE} describe --abbrev=7
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      WORKING_DIRECTORY "${FEX_PROJECT_SOURCE_DIR}"
       OUTPUT_VARIABLE GIT_DESCRIBE_STRING
       ERROR_QUIET
       OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -576,7 +578,7 @@ if (OVERRIDE_HASH STREQUAL "detect")
   if (GIT_FOUND)
     execute_process(
       COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      WORKING_DIRECTORY "${FEX_PROJECT_SOURCE_DIR}"
       OUTPUT_VARIABLE GIT_HASH
       ERROR_QUIET
       OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -620,7 +622,7 @@ if (BUILD_TESTING)
 
   # Runs the whole test suite, with large pages enabled to reduce the cost of fork() in ctest.
   add_custom_target(tests
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${FEX_PROJECT_BINARY_DIR}"
     USES_TERMINAL
     COMMAND ${CMAKE_COMMAND} -E env GLIBC_TUNABLES=glibc.malloc.hugetlb=1 ctest "--progress" "--timeout" "302" ${TEST_JOB_FLAG})
 endif()
@@ -708,7 +710,7 @@ if (BUILD_THUNKS)
     CODE "message(\"-- Installing: guest-libs\")"
     CODE "
       execute_process(COMMAND ${CMAKE_COMMAND} --build . --target install
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/Guest)"
+        WORKING_DIRECTORY ${FEX_PROJECT_BINARY_DIR}/Guest)"
     DEPENDS guest-libs
     COMPONENT Runtime)
 
@@ -716,17 +718,17 @@ if (BUILD_THUNKS)
     CODE "message(\"-- Installing: guest-libs-32\")"
     CODE "
       execute_process(COMMAND ${CMAKE_COMMAND} --build . --target install
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/Guest_32)"
+        WORKING_DIRECTORY ${FEX_PROJECT_BINARY_DIR}/Guest_32)"
     DEPENDS guest-libs-32
     COMPONENT Runtime)
 
   add_custom_target(uninstall_guest-libs
     COMMAND ${CMAKE_COMMAND} "--build" "." "--target" "uninstall"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/Guest)
+    WORKING_DIRECTORY ${FEX_PROJECT_BINARY_DIR}/Guest)
 
   add_custom_target(uninstall_guest-libs-32
     COMMAND ${CMAKE_COMMAND} "--build" "." "--target" "uninstall"
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/Guest_32)
+    WORKING_DIRECTORY ${FEX_PROJECT_BINARY_DIR}/Guest_32)
 
   add_dependencies(uninstall uninstall_guest-libs)
   add_dependencies(uninstall uninstall_guest-libs-32)

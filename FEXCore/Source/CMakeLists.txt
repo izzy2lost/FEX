@@ -135,10 +135,10 @@ endif()
 
 # Generate config
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Interface/Config/Config.json.in
-  ${CMAKE_BINARY_DIR}/generated/Config/Config.json)
+  ${FEX_PROJECT_BINARY_DIR}/generated/Config/Config.json)
 
 # Generate IR include file
-set(OUTPUT_IR_FOLDER "${CMAKE_BINARY_DIR}/include/FEXCore/IR")
+set(OUTPUT_IR_FOLDER "${FEX_PROJECT_BINARY_DIR}/include/FEXCore/IR")
 set(OUTPUT_NAME "${OUTPUT_IR_FOLDER}/IRDefines.inc")
 set(OUTPUT_DISPATCHER_NAME "${OUTPUT_IR_FOLDER}/IRDefines_Dispatch.inc")
 set(INPUT_NAME "${CMAKE_CURRENT_SOURCE_DIR}/Interface/IR/IR.json")
@@ -155,7 +155,7 @@ add_custom_command(
 set_source_files_properties(${OUTPUT_NAME} PROPERTIES GENERATED TRUE)
 
 # Generate IR documentation
-set(OUTPUT_IR_DOC "${CMAKE_BINARY_DIR}/IR.md")
+set(OUTPUT_IR_DOC "${FEX_PROJECT_BINARY_DIR}/IR.md")
 
 add_custom_command(
   OUTPUT "${OUTPUT_IR_DOC}"
@@ -172,12 +172,12 @@ add_custom_target(IR_INC
   DEPENDS "${OUTPUT_IR_DOC}")
 
 # Generate the configuration include file
-set(OUTPUT_CONFIG_FOLDER "${CMAKE_BINARY_DIR}/include/FEXCore/Config")
+set(OUTPUT_CONFIG_FOLDER "${FEX_PROJECT_BINARY_DIR}/include/FEXCore/Config")
 set(OUTPUT_CONFIG_NAME "${OUTPUT_CONFIG_FOLDER}/ConfigValues.inl")
 set(OUTPUT_CONFIG_OPTION_NAME "${OUTPUT_CONFIG_FOLDER}/ConfigOptions.inl")
-set(INPUT_CONFIG_NAME "${CMAKE_BINARY_DIR}/generated/Config/Config.json")
-set(OUTPUT_MAN_NAME "${CMAKE_BINARY_DIR}/generated/FEX.1")
-set(OUTPUT_MAN_NAME_COMPRESS "${CMAKE_BINARY_DIR}/generated/FEX.1.gz")
+set(INPUT_CONFIG_NAME "${FEX_PROJECT_BINARY_DIR}/generated/Config/Config.json")
+set(OUTPUT_MAN_NAME "${FEX_PROJECT_BINARY_DIR}/generated/FEX.1")
+set(OUTPUT_MAN_NAME_COMPRESS "${FEX_PROJECT_BINARY_DIR}/generated/FEX.1.gz")
 
 file(MAKE_DIRECTORY "${OUTPUT_CONFIG_FOLDER}")
 
@@ -232,7 +232,7 @@ function(AddDefaultOptionsToTarget Name)
   target_include_directories(${Name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/)
 
   target_include_directories(${Name} PUBLIC "${PROJECT_SOURCE_DIR}/include/")
-  target_include_directories(${Name} PUBLIC "${CMAKE_BINARY_DIR}/include/")
+  target_include_directories(${Name} PUBLIC "${FEX_PROJECT_BINARY_DIR}/include/")
 
   target_compile_definitions(${Name} PRIVATE ${DEFINES})
   add_dependencies(${Name} CONFIG_INC IR_INC)

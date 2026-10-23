@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <FEXCore/fextl/fmt.h>
 #include <FEXCore/fextl/functional.h>
 #include <FEXCore/fextl/string.h>
@@ -58,7 +60,7 @@ static bool RecursiveRemoveDirectory(int parent_fd, const char* Directory) {
   }
 
   while (true) {
-    ssize_t read = getdents64(dir_fd, dirent_buffer, dirent_size);
+    ssize_t read = ::syscall(SYS_getdents64, dir_fd, dirent_buffer, dirent_size);
 
     if (read == -1) {
       if (errno == EINVAL) {
@@ -151,7 +153,7 @@ FEX_DEFAULT_VISIBILITY void WalkDirectory(std::string_view Directory,
   }
 
   while (true) {
-    ssize_t read = getdents64(dir_fd, dirent_buffer, dirent_size);
+    ssize_t read = ::syscall(SYS_getdents64, dir_fd, dirent_buffer, dirent_size);
 
     if (read == -1) {
       if (errno == EINVAL) {

@@ -463,6 +463,43 @@ public:
     return ExitOnHLT;
   }
 
+  void SetGuestMemoryBase(uint64_t Base) override {
+    GuestMemoryBase = Base;
+  }
+  void EnableSystemOps() override {
+    SystemOps = true;
+  }
+  void SetIDTRegister(uint32_t Base, uint16_t Limit) override {
+    IDTBase = Base;
+    IDTLimit = Limit;
+  }
+  void SetHookQuery(HookQueryFn Fn, void* Opaque) override {
+    HookQuery = Fn;
+    HookQueryOpaque = Opaque;
+  }
+  void SetGuestCycleCounterRatio(uint64_t RatioQ32) override {
+    CycleCounterRatioQ32 = RatioQ32;
+  }
+  void EnableX87SinglePrecision() override {
+    X87SinglePrecision = true;
+  }
+
+  bool SystemOpsEnabled() const {
+    return SystemOps;
+  }
+  bool IsHookedRIP(uint64_t RIP) const {
+    return HookQuery && HookQuery(HookQueryOpaque, RIP);
+  }
+  bool HasHookQuery() const {
+    return HookQuery != nullptr;
+  }
+
+  uint64_t GuestMemoryBase {};
+  uint32_t IDTBase {};
+  uint16_t IDTLimit {};
+  uint64_t CycleCounterRatioQ32 {};
+  std::atomic<bool> X87SinglePrecision {};
+
   bool AreMonoHacksActive() const {
     return Config.MonoHacks && MonoDetected;
   }
@@ -499,6 +536,9 @@ private:
   bool MemcpyAtomicTSOEmulationEnabled = false;
 
   bool ExitOnHLT = false;
+  bool SystemOps = false;
+  HookQueryFn HookQuery {};
+  void* HookQueryOpaque {};
   FEX_CONFIG_OPT(AppFilename, APP_FILENAME);
 
   std::shared_mutex CustomIRMutex;

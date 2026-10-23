@@ -643,6 +643,14 @@
           "Emulates X87 floating point using 64-bit precision. This reduces emulation accuracy and may result in rendering bugs."
         ]
       },
+      "X87ReducedPrecisionControl": {
+        "Type": "bool",
+        "Default": "false",
+        "AffectsCodeGen": "true",
+        "Desc": [
+          "With X87ReducedPrecision, honour FCW.PC = single once the embedder selects it (Context::EnableX87SinglePrecision)."
+        ]
+      },
       "StallProcess": {
         "Type": "bool",
         "Default": "false",

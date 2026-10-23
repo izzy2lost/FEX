@@ -28,9 +28,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/git_version.h.in
-  ${CMAKE_BINARY_DIR}/generated/git_version.h)
+  ${FEX_PROJECT_BINARY_DIR}/generated/git_version.h)
 
-include_directories(${CMAKE_BINARY_DIR}/generated)
+include_directories(${FEX_PROJECT_BINARY_DIR}/generated)
 
 # Disable strict aliasing for all build modes
 # See discussion in https://github.com/FEX-Emu/FEX/pull/4494#issuecomment-2800608944
@@ -40,7 +40,7 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-strict-aliasing> $<$<COMPILE_
 add_subdirectory(Source/)
 
 if (NOT BUILD_STEAM_SUPPORT)
-  install (DIRECTORY include/FEXCore ${CMAKE_BINARY_DIR}/include/FEXCore
+  install (DIRECTORY include/FEXCore ${FEX_PROJECT_BINARY_DIR}/include/FEXCore
     DESTINATION include
     COMPONENT Development)
 endif()
