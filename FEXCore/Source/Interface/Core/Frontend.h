@@ -104,6 +104,9 @@ private:
   FEX_CONFIG_OPT(EnableCodeCacheValidation, ENABLECODECACHEVALIDATION);
 
   DecodedBlockStatus DecodeInstructionImpl(uint64_t PC);
+  // System mode: a privileged or system instruction at the stream, decoded as one
+  // SystemOpInstInfo instruction (OP = its SystemOpKind). False if it isn't one.
+  bool DecodeSystemOp();
   DecodedBlockStatus DecodeInstruction(uint64_t PC);
 
   void BranchTargetInMultiblockRange();

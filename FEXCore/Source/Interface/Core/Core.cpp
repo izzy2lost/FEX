@@ -595,6 +595,10 @@ ContextImpl::GenerateIR(FEXCore::Core::InternalThreadState* Thread, uint64_t Gue
       // Reset any block-specific state
       Thread->OpDispatcher->StartNewBlock();
 
+      if (SystemOpsEnabled()) {
+        Thread->OpDispatcher->SystemBlockEntry(Block.Entry, IsHookedRIP(Block.Entry));
+      }
+
       const uint64_t InstsInBlock = Block.NumInstructions;
       if (InstsInBlock == 0) {
         // Special case for an empty instruction block.
@@ -623,6 +627,13 @@ ContextImpl::GenerateIR(FEXCore::Core::InternalThreadState* Thread, uint64_t Gue
 #endif
 
         bool IsLocked = DecodedInfo->Flags & FEXCore::X86Tables::DecodeFlags::FLAG_LOCK;
+
+        if (i != 0 && HasHookQuery() && IsHookedRIP(InstAddress)) {
+          // A hooked address inside a block: end the block before it, so it starts one
+          // of its own and gets the hook check at its entry.
+          Thread->OpDispatcher->ExitFunction(Thread->OpDispatcher->_InlineEntrypointOffset(GPRSize, InstAddress - GuestRIP));
+          break;
+        }
 
         // Do a partial register cache flush before every instruction. This
         // prevents cross-instruction static register caching, while allowing

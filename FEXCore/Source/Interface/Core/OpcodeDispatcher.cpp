@@ -3055,14 +3055,20 @@ void OpDispatchBuilder::SIDTOp(OpcodeArgs) {
 
   // See SGDTOp, matches Linux in reported values
   uint64_t IDTAddress = 0xFFFFFE0000000000ULL;
+  uint64_t IDTLimit = 0xfff;
   auto IDTStoreSize = OpSize::i64Bit;
   if (!Is64BitMode) {
     // Mask off upper bits if 32-bit result.
     IDTAddress &= ~0U;
     IDTStoreSize = OpSize::i32Bit;
   }
+  if (CTX->SystemOpsEnabled()) {
+    // The embedder's IDT (Context::SetIDTRegister).
+    IDTAddress = CTX->IDTBase;
+    IDTLimit = CTX->IDTLimit;
+  }
 
-  _StoreMemGPRAutoTSO(OpSize::i16Bit, DestAddress, Constant(0xfff));
+  _StoreMemGPRAutoTSO(OpSize::i16Bit, DestAddress, Constant(IDTLimit));
   _StoreMemGPRAutoTSO(IDTStoreSize, AddressMode {.Base = DestAddress, .Offset = 2, .AddrSize = OpSize::i64Bit}, Constant(IDTAddress));
 }
 
@@ -3113,7 +3119,16 @@ OpDispatchBuilder::CycleCounterPair OpDispatchBuilder::CycleCounter(bool SelfSyn
   Ref CounterLow {};
   Ref CounterHigh {};
   auto Counter = _CycleCounter(SelfSynchronizingLoads);
-  if (CTX->Config.TSCScale) {
+  if (CTX->CycleCounterRatioQ32) {
+    // System mode: (CNTVCT - CycleCounterOffset) * Ratio / 2^32, the guest CPU's clock.
+    auto Ticks = Sub(OpSize::i64Bit, Counter, _LoadContextGPR(OpSize::i64Bit, offsetof(FEXCore::Core::CpuStateFrame, CycleCounterOffset)));
+    auto Ratio = Constant(CTX->CycleCounterRatioQ32);
+    auto Lo = _UMul(OpSize::i64Bit, Ticks, Ratio);
+    auto Hi = _UMulH(OpSize::i64Bit, Ticks, Ratio);
+    auto Scaled = _Orlshr(OpSize::i64Bit, _Lshl(OpSize::i64Bit, Hi, Constant(32)), Lo, 32);
+    CounterLow = _Bfe(OpSize::i64Bit, 32, 0, Scaled);
+    CounterHigh = _Bfe(OpSize::i64Bit, 32, 32, Scaled);
+  } else if (CTX->Config.TSCScale) {
     CounterLow = _Lshl(OpSize::i32Bit, Counter, Constant(CTX->Config.TSCScale));
     CounterHigh = _Lshr(OpSize::i64Bit, Counter, Constant(32 - CTX->Config.TSCScale));
   } else {
@@ -5158,6 +5173,55 @@ void OpDispatchBuilder::BreakOp(OpcodeArgs, FEXCore::IR::BreakDefinition BreakDe
     StartNewBlock();
   } else {
     BlockSetRIP = true;
+  }
+}
+
+void OpDispatchBuilder::SystemOpInst(OpcodeArgs) {
+  CalculateDeferredFlags();
+
+  const auto GPRSize = GetGPROpSize();
+  _StoreContextGPR(GPRSize, GetRelocatedPC(Op, -Op->InstSize), offsetof(FEXCore::Core::CPUState, rip));
+  const uint64_t Info = Op->OP | (uint64_t {Op->InstSize} << 8);
+  _StoreContextGPR(OpSize::i64Bit, Constant(Info), offsetof(FEXCore::Core::CpuStateFrame, SystemOpInfo));
+
+  FlushRegisterCache();
+  // Doesn't return here: the dispatcher refills the guest state the handler left and
+  // continues at its RIP. The block's exit to the next instruction is never reached.
+  _Syscall();
+}
+
+void OpDispatchBuilder::SystemBlockEntry(uint64_t BlockEntry, bool Hooked) {
+  const auto GPRSize = GetGPROpSize();
+
+  // Branches to a new block that leaves with Kind when Cond is nonzero; code after it
+  // continues on the not-taken path.
+  auto ExitIf = [&](Ref Cond, FEXCore::Core::SystemOpKind Kind) {
+    auto Jump = CondJump(Cond);
+    auto Current = GetCurrentBlock();
+
+    auto ExitBlock = CreateNewCodeBlockAtEnd();
+    SetTrueJumpTarget(Jump, ExitBlock);
+    SetCurrentCodeBlock(ExitBlock);
+    StartNewBlock();
+    _StoreContextGPR(GPRSize, _EntrypointOffset(GPRSize, BlockEntry - Entry), offsetof(FEXCore::Core::CPUState, rip));
+    _StoreContextGPR(OpSize::i64Bit, Constant(FEXCore::ToUnderlying(Kind)), offsetof(FEXCore::Core::CpuStateFrame, SystemOpInfo));
+    FlushRegisterCache();
+    _Syscall();
+    ExitFunction(_InlineEntrypointOffset(GPRSize, BlockEntry - Entry));
+
+    auto Next = CreateNewCodeBlockAfter(Current);
+    SetFalseJumpTarget(Jump, Next);
+    SetCurrentCodeBlock(Next);
+    StartNewBlock();
+  };
+
+  ExitIf(_LoadContextGPR(OpSize::i32Bit, offsetof(FEXCore::Core::CpuStateFrame, InterruptPending)), FEXCore::Core::SystemOpKind::Interrupt);
+
+  if (Hooked) {
+    auto Bypass = _LoadContextGPR(OpSize::i32Bit, offsetof(FEXCore::Core::CpuStateFrame, HookBypass));
+    ExitIf(_Xor(OpSize::i32Bit, Bypass, Constant(static_cast<uint32_t>(BlockEntry))), FEXCore::Core::SystemOpKind::Hook);
+    // Bypassed once: the next arrival exits again.
+    _StoreContextGPR(OpSize::i32Bit, Constant(0), offsetof(FEXCore::Core::CpuStateFrame, HookBypass));
   }
 }
 

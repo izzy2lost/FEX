@@ -435,4 +435,7 @@ const std::array<X86InstInfo, MAX_PRIMARY_TABLE_SIZE> BaseOps = []() consteval {
   return Table;
 }();
 
+
+const X86InstInfo SystemOpInstInfo = {"SYSOP", TYPE_INST, FLAGS_BLOCK_END, 0, {.OpDispatch = &IR::OpDispatchBuilder::SystemOpInst}};
+
 }

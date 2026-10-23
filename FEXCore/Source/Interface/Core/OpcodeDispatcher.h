@@ -898,6 +898,14 @@ public:
   void UnimplementedOp(OpcodeArgs);
   void PermissionRestrictedOp(OpcodeArgs);
 
+  // System mode (Context::EnableSystemOps).
+  // A privileged/system instruction (Op->OP = SystemOpKind): leave through the syscall
+  // path at the instruction, SystemOpInfo = kind | size << 8.
+  void SystemOpInst(OpcodeArgs);
+  // At a guest block's entry: leave with SystemOpKind::Interrupt when one is pending,
+  // and with SystemOpKind::Hook at a hooked address unless HookBypass names it.
+  void SystemBlockEntry(uint64_t BlockEntry, bool Hooked);
+
   ///< Helper for PSHUD and VPERMILPS(imm) since they are the same instruction
   Ref Single128Bit4ByteVectorShuffle(Ref Src, uint8_t Shuffle);
   // AVX 128-bit operations

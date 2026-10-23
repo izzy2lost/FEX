@@ -533,6 +533,8 @@ constexpr size_t MAX_VEX_TABLE_SIZE = (1 << 13);
 constexpr size_t MAX_VEX_GROUP_TABLE_SIZE = (1 << 7);
 
 extern const std::array<X86InstInfo, MAX_PRIMARY_TABLE_SIZE> BaseOps;
+// System mode: every privileged/system instruction the decoder recognises (OP = SystemOpKind).
+extern const X86InstInfo SystemOpInstInfo;
 extern const std::array<X86InstInfo, MAX_SECOND_TABLE_SIZE> SecondBaseOps;
 extern const std::array<X86InstInfo, MAX_REP_MOD_TABLE_SIZE> RepModOps;
 extern const std::array<X86InstInfo, MAX_REPNE_MOD_TABLE_SIZE> RepNEModOps;

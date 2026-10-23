@@ -849,6 +849,10 @@ Decoder::DecodedBlockStatus Decoder::DecodeInstructionImpl(uint64_t PC) {
   memset(DecodeInst, 0, sizeof(DecodedInst));
   DecodeInst->PC = PC;
 
+  if (CTX->SystemOpsEnabled() && !BlockInfo.Is64BitMode && DecodeSystemOp()) {
+    return DecodedBlockStatus::SUCCESS;
+  }
+
   for (;;) {
     if (InstructionSize >= MAX_INST_SIZE) {
       return DecodedBlockStatus::INVALID_INST;
@@ -1254,6 +1258,150 @@ bool Decoder::IsBranchMonoTailcall(uint64_t NumInstructions) const {
   }
 
   return false;
+}
+
+bool Decoder::DecodeSystemOp() {
+  using Kind = FEXCore::Core::SystemOpKind;
+  auto Peek = [this](uint8_t Offset) -> int {
+    auto Byte = PeekByte(Offset);
+    return Byte ? *Byte : -1;
+  };
+
+  // Legacy prefixes. The embedder reads operand sizes and REP from the bytes itself.
+  uint8_t P = 0;
+  bool Addr16 = false;
+  for (;; ++P) {
+    if (P >= MAX_INST_SIZE - 4) {
+      return false;
+    }
+    const int B = Peek(P);
+    if (B == 0x66 || B == 0xF2 || B == 0xF3 || B == 0xF0 || B == 0x26 || B == 0x2E || B == 0x36 || B == 0x3E || B == 0x64 || B == 0x65) {
+      continue;
+    }
+    if (B == 0x67) {
+      Addr16 = true;
+      continue;
+    }
+    break;
+  }
+
+  // Length of ModRM + SIB + displacement at Offset, or -1.
+  auto ModRMLength = [&](uint8_t Offset) -> int {
+    const int M = Peek(Offset);
+    if (M < 0) {
+      return -1;
+    }
+    const unsigned Mod = M >> 6, RM = M & 7;
+    if (Mod == 3) {
+      return 1;
+    }
+    if (Addr16) {
+      return Mod == 0 ? (RM == 6 ? 3 : 1) : Mod == 1 ? 2 : 3;
+    }
+    int Length = 1;
+    if (RM == 4) {
+      const int SIB = Peek(Offset + 1);
+      if (SIB < 0) {
+        return -1;
+      }
+      ++Length;
+      if (Mod == 0 && (SIB & 7) == 5) {
+        Length += 4;
+      }
+    } else if (Mod == 0 && RM == 5) {
+      Length += 4;
+    }
+    return Length + (Mod == 1 ? 1 : Mod == 2 ? 4 : 0);
+  };
+
+  Kind K = Kind::None;
+  int Length = 0; // past the prefixes
+  switch (Peek(P)) {
+  case 0xE4:
+  case 0xE5: K = Kind::In, Length = 2; break;
+  case 0xE6:
+  case 0xE7: K = Kind::Out, Length = 2; break;
+  case 0xEC:
+  case 0xED: K = Kind::In, Length = 1; break;
+  case 0xEE:
+  case 0xEF: K = Kind::Out, Length = 1; break;
+  case 0x6C:
+  case 0x6D: K = Kind::Ins, Length = 1; break;
+  case 0x6E:
+  case 0x6F: K = Kind::Outs, Length = 1; break;
+  case 0xFA: K = Kind::Cli, Length = 1; break;
+  case 0xFB: K = Kind::Sti, Length = 1; break;
+  case 0xCD: K = Kind::Int, Length = 2; break;
+  case 0xCE: K = Kind::Into, Length = 1; break;
+  case 0xF1: K = Kind::Int1, Length = 1; break;
+  case 0xCC: K = Kind::Int3, Length = 1; break;
+  // HLT stays FEX's: with EnableExitOnHLT it returns from ExecuteThread (the embedder's stop stub).
+  case 0x0F:
+    switch (Peek(P + 1)) {
+    case 0x0B: K = Kind::Ud2, Length = 2; break;
+    case 0x30: K = Kind::Wrmsr, Length = 2; break;
+    case 0x32: K = Kind::Rdmsr, Length = 2; break;
+    case 0x33: K = Kind::Rdpmc, Length = 2; break;
+    case 0x06: K = Kind::Clts, Length = 2; break;
+    case 0x08: K = Kind::Invd, Length = 2; break;
+    case 0x09: K = Kind::Wbinvd, Length = 2; break;
+    case 0xA2: K = Kind::Cpuid, Length = 2; break;
+    case 0x20:
+    case 0x22: K = Kind::Other, Length = Peek(P + 2) < 0 ? -1 : 3; break; // MOV CR: reported as Other, as the core expects
+    case 0x21:
+    case 0x23: K = Kind::MovDR, Length = Peek(P + 2) < 0 ? -1 : 3; break;
+    case 0x00: { // Group 6: LLDT, LTR
+      const int M = Peek(P + 2);
+      const unsigned Reg = (M >> 3) & 7;
+      if (M < 0 || (Reg != 2 && Reg != 3)) {
+        return false;
+      }
+      K = Reg == 2 ? Kind::Lldt : Kind::Ltr;
+      const int L = ModRMLength(P + 2);
+      Length = L < 0 ? -1 : 2 + L;
+      break;
+    }
+    case 0x01: { // Group 7: LGDT, LIDT, LMSW, INVLPG (SGDT/SIDT/SMSW and the mod=3 forms stay FEX's)
+      const int M = Peek(P + 2);
+      if (M < 0) {
+        return false;
+      }
+      const unsigned Mod = M >> 6, Reg = (M >> 3) & 7;
+      if (Reg == 6) {
+        K = Kind::Lmsw;
+      } else if (Mod != 3 && Reg == 2) {
+        K = Kind::Lgdt;
+      } else if (Mod != 3 && Reg == 3) {
+        K = Kind::Lidt;
+      } else if (Mod != 3 && Reg == 7) {
+        K = Kind::Invlpg;
+      } else {
+        return false;
+      }
+      const int L = ModRMLength(P + 2);
+      Length = L < 0 ? -1 : 2 + L;
+      break;
+    }
+    default: return false;
+    }
+    break;
+  default: return false;
+  }
+
+  if (Length < 0) {
+    return false;
+  }
+  for (int i = 0; i < P + Length; ++i) {
+    ReadByte();
+  }
+  if (HitNonExecutableRange) {
+    return false;
+  }
+
+  DecodeInst->OP = FEXCore::ToUnderlying(K);
+  DecodeInst->TableInfo = &FEXCore::X86Tables::SystemOpInstInfo;
+  DecodeInst->InstSize = InstructionSize;
+  return true;
 }
 
 bool Decoder::InstCanContinue() const {
