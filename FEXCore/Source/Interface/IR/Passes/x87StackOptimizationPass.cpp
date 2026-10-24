@@ -151,11 +151,14 @@ private:
 
 class X87StackOptimization final : public Pass {
 public:
-  X87StackOptimization(const FEXCore::HostFeatures& Features, OpSize GPROpSize)
+  X87StackOptimization(const FEXCore::HostFeatures& Features, OpSize GPROpSize, const std::atomic<bool>* SinglePrecision)
     : Features(Features)
-    , GPROpSize(GPROpSize) {
+    , GPROpSize(GPROpSize)
+    , SinglePrecision(SinglePrecision) {
     FEX_CONFIG_OPT(ReducedPrecision, X87REDUCEDPRECISION);
+    FEX_CONFIG_OPT(ReducedPrecisionControl, X87REDUCEDPRECISIONCONTROL);
     ReducedPrecisionMode = ReducedPrecision;
+    PrecisionControl = ReducedPrecision && ReducedPrecisionControl;
   }
   void Run(IREmitter* Emit) override;
 
@@ -163,6 +166,18 @@ private:
   const FEXCore::HostFeatures& Features;
   const OpSize GPROpSize;
   bool ReducedPrecisionMode;
+  // X87ReducedPrecisionControl: once the embedder selects single precision
+  // (Context::EnableX87SinglePrecision), arithmetic results round to it, as FCW.PC = single
+  // makes the x87 do. Loads keep their precision, as on the x87.
+  bool PrecisionControl {};
+  bool RoundSingle {};
+  const std::atomic<bool>* SinglePrecision {};
+  Ref RoundResult(Ref Value) {
+    if (!RoundSingle) {
+      return Value;
+    }
+    return IREmit->_Float_FToF(OpSize::i64Bit, OpSize::i32Bit, IREmit->_Float_FToF(OpSize::i32Bit, OpSize::i64Bit, Value));
+  }
   FEX_CONFIG_OPT(DisableVixlIndirectCalls, DISABLE_VIXL_INDIRECT_RUNTIME_CALLS);
 
   // Helpers
@@ -532,6 +547,7 @@ void X87StackOptimization::HandleUnop(IROps Op64, bool VFOp64, IROps Op80) {
     } else {
       DeriveOp(Value, Op64, IREmit->_F64SIN(St0));
     }
+    Value = RoundResult(Value);
   } else {
     DeriveOp(Value, Op80, IREmit->_F80SQRT(St0));
   }
@@ -556,6 +572,7 @@ void X87StackOptimization::HandleBinopValue(IROps Op64, bool VFOp64, IROps Op80,
         DeriveOp(Node, Op64, IREmit->_F64FPREM(StackNode, ValueNode));
       }
     }
+    Node = RoundResult(Node);
   } else {
     if (Reverse) {
       DeriveOp(Node, Op80, IREmit->_F80Add(ValueNode, StackNode));
@@ -724,6 +741,8 @@ Ref X87StackOptimization::SynchronizeStackValues() {
 
 void X87StackOptimization::Run(IREmitter* Emit) {
   FEXCORE_PROFILE_SCOPED("PassManager::x87StackOpt");
+
+  RoundSingle = PrecisionControl && SinglePrecision && SinglePrecision->load(std::memory_order_relaxed);
 
   auto CurrentIR = Emit->ViewIR();
   auto* HeaderOp = CurrentIR.GetHeader();
@@ -1234,7 +1253,7 @@ void X87StackOptimization::Run(IREmitter* Emit) {
   }
 }
 
-fextl::unique_ptr<Pass> CreateX87StackOptimizationPass(const HostFeatures& Features, OpSize GPROpSize) {
-  return fextl::make_unique<X87StackOptimization>(Features, GPROpSize);
+fextl::unique_ptr<Pass> CreateX87StackOptimizationPass(const HostFeatures& Features, OpSize GPROpSize, const std::atomic<bool>* SinglePrecision) {
+  return fextl::make_unique<X87StackOptimization>(Features, GPROpSize, SinglePrecision);
 }
 } // namespace FEXCore::IR

@@ -3,6 +3,8 @@
 
 #include <FEXCore/fextl/memory.h>
 
+#include <atomic>
+
 namespace FEXCore {
 class CPUIDEmu;
 struct HostFeatures;
@@ -13,7 +15,7 @@ class Pass;
 
 fextl::unique_ptr<Pass> CreateDeadFlagCalculationEliminination();
 fextl::unique_ptr<Pass> CreateRegisterAllocationPass(const CPUIDEmu* CPUID);
-fextl::unique_ptr<Pass> CreateX87StackOptimizationPass(const HostFeatures&, OpSize GPROpSize);
+fextl::unique_ptr<Pass> CreateX87StackOptimizationPass(const HostFeatures&, OpSize GPROpSize, const std::atomic<bool>* SinglePrecision);
 fextl::unique_ptr<Pass> CreateGuestMemoryBasePass();
 
 namespace Validation {

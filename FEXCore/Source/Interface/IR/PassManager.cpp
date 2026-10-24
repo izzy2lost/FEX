@@ -73,7 +73,8 @@ void PassManager::AddDefaultPasses(Context::ContextImpl* ctx) {
   // We only specifically disable optimization passes if desired, as IR output should
   // still be well-formed regardless of the modifications made to it.
   if (!DisablePasses()) {
-    InsertPass(CreateX87StackOptimizationPass(ctx->HostFeatures, ctx->Config.Is64BitMode ? IR::OpSize::i64Bit : IR::OpSize::i32Bit));
+    InsertPass(CreateX87StackOptimizationPass(ctx->HostFeatures, ctx->Config.Is64BitMode ? IR::OpSize::i64Bit : IR::OpSize::i32Bit,
+                                              &ctx->X87SinglePrecision));
     InsertPass(CreateDeadFlagCalculationEliminination());
   }
 
